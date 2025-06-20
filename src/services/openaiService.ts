@@ -3,6 +3,7 @@ import { config } from "../config/env";
 import fs from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
+import { downloadAndSaveImage } from '../utils/imageUtils';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -133,13 +134,23 @@ export const generateImage = async (
       size: "1024x1024",
     });
     
-
     if (!response.data || response.data.length === 0) {
       throw new Error("No image was generated");
     }
-
+    
+    // Get the temporary OpenAI image URL
+    const openaiImageUrl = response.data[0].url || "";
+    
+    if (!openaiImageUrl) {
+      throw new Error("No image URL was returned");
+    }
+    
+    // Download and save the image locally, get the local URL path
+    const localImageUrl = await downloadAndSaveImage(openaiImageUrl);
+    
+    // Return the local image URL (this will be a path like /images/uuid.png)
     return {
-      imageUrl: response.data[0].url || "",
+      imageUrl: localImageUrl,
     };
   } catch (error) {
     console.error("OpenAI API error:", error);
@@ -379,5 +390,71 @@ export const generateDevotionalStory = async (): Promise<{
   } catch (error) {
     console.error("Failed to generate devotional story:", error, text);
     throw new Error("Failed to generate devotional story");
+  }
+};
+
+/**
+ * Generate Bible content based on a specific topic
+ */
+export const generateTopicContent = async (
+  topic: string,
+  bibleVersion: string = 'NIV',
+  wordCount: number = 300
+): Promise<{
+  title: string;
+  content: string;
+  verse: string;
+  explanation: string;
+  imageUrl: string;
+  audioUrl: string;
+  bibleVersion: string;
+  wordCount: number;
+  tokensUsed: number;
+}> => {
+  // Calculate explanation word count (roughly 1/3 of the main content)
+  const explanationWordCount = Math.floor(wordCount / 3);
+  
+  const topicPrompt = `Create Bible-based content about the topic "${topic}" using the ${bibleVersion} Bible translation.
+  
+  IMPORTANT: You must return a valid JSON object with the following structure:
+  {
+    "title": "An engaging title related to the topic",
+    "verse": "A Bible verse that best represents this topic (include reference) from the ${bibleVersion} translation",
+    "content": "A ${wordCount}-word reflection on this topic from a Biblical perspective",
+    "explanation": "A ${explanationWordCount}-word explanation of how this topic applies to modern Christian life"
+  }
+  
+  Make sure the content is spiritually enriching, biblically accurate, and personally applicable.
+  Do not include any markdown formatting, code blocks, or any text outside of the JSON object.`;
+
+  const { text, tokensUsed } = await generateText(topicPrompt, 1000, true);
+
+  try {
+    // Clean the text in case it contains markdown formatting
+    const cleanedText = text.replace(/```json|```/g, "").trim();
+    const parsedResponse = JSON.parse(cleanedText);
+
+    // Generate an image based on the topic
+    const imagePrompt = `Create an inspirational Christian image representing the Biblical topic of "${topic}". The image should be respectful, spiritual, and evoke the essence of ${parsedResponse.verse}.`;
+    const { imageUrl } = await generateImage(imagePrompt);
+
+    // Generate audio narration for the topic content
+    const audioText = `${parsedResponse.title}. ${parsedResponse.verse}. ${parsedResponse.content}. ${parsedResponse.explanation}`;
+    const audioUrl = await generateSpeech(audioText, parsedResponse.title);
+
+    return {
+      title: parsedResponse.title,
+      content: parsedResponse.content,
+      verse: parsedResponse.verse,
+      explanation: parsedResponse.explanation,
+      imageUrl,
+      audioUrl,
+      bibleVersion,
+      wordCount,
+      tokensUsed,
+    };
+  } catch (error) {
+    console.error("Failed to generate topic content:", error, text);
+    throw new Error("Failed to generate content for topic: " + topic);
   }
 };

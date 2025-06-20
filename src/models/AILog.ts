@@ -26,7 +26,7 @@ const aiLogSchema = new Schema<IAILog>(
     interactionType: {
       type: String,
       required: true,
-      enum: ['daily-quote', 'prayer', 'story', 'explanation', 'image'],
+      enum: ['daily-quote', 'prayer', 'story', 'explanation', 'image', 'topic-content', 'quiz'],
     },
     prompt: {
       type: String,

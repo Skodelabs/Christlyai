@@ -1,0 +1,18 @@
+2025-06-20 19:45:47 [INFO]: Attempting to download image from URL: https://oaidalleapiprodscus.blob.core.windows.net/private/org-hIgHQX7N5rdaubIB1KRlLJkv/user-nB7ol9FVVBLk70hGeVdtzoGl/img-r7zTc55o1ncgklM45VeA0PDz.png?st=2025-06-20T13%3A15%3A47Z&se=2025-06-20T15%3A15%3A47Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=475fd488-6c59-44a5-9aa9-31c4db451bea&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-06-19T22%3A26%3A57Z&ske=2025-06-20T22%3A26%3A57Z&sks=b&skv=2024-08-04&sig=Yv5BUkHf1BK5vML8nqBpkF79R63vVhitq3HdBNJJdKw%3D
+2025-06-20 19:45:47 [INFO]: Ensuring images directory exists at: C:\Users\manom\Desktop\bibleai\server\public\images
+2025-06-20 19:45:47 [INFO]: Images directory already exists
+2025-06-20 19:45:47 [INFO]: Will save image to: C:\Users\manom\Desktop\bibleai\server\public\images\65fe4056-5ada-45c1-9911-06540a2df204.png
+2025-06-20 19:45:48 [INFO]: Image download successful, saving to disk
+2025-06-20 19:45:51 [INFO]: Image saved successfully. Public URL: /images/65fe4056-5ada-45c1-9911-06540a2df204.png
+2025-06-20 19:45:53 [INFO]: Attempting to download image from URL: https://oaidalleapiprodscus.blob.core.windows.net/private/org-hIgHQX7N5rdaubIB1KRlLJkv/user-nB7ol9FVVBLk70hGeVdtzoGl/img-ZK7aBiJLXBMLQFAXVCk9qQv6.png?st=2025-06-20T13%3A15%3A54Z&se=2025-06-20T15%3A15%3A54Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=475fd488-6c59-44a5-9aa9-31c4db451bea&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-06-20T09%3A14%3A35Z&ske=2025-06-21T09%3A14%3A35Z&sks=b&skv=2024-08-04&sig=UsmV7EStYHTSnBQbGcS1D/0HutVuUf%2BP8AVhiHl8H%2BU%3D
+2025-06-20 19:45:53 [INFO]: Ensuring images directory exists at: C:\Users\manom\Desktop\bibleai\server\public\images
+2025-06-20 19:45:53 [INFO]: Images directory already exists
+2025-06-20 19:45:53 [INFO]: Will save image to: C:\Users\manom\Desktop\bibleai\server\public\images\1c6d5758-4107-4955-bb46-3c240adfc4ee.png
+2025-06-20 19:45:54 [INFO]: Image download successful, saving to disk
+2025-06-20 19:45:55 [INFO]: Image saved successfully. Public URL: /images/1c6d5758-4107-4955-bb46-3c240adfc4ee.png
+2025-06-20 20:11:36 [INFO]: Attempting to download image from URL: https://oaidalleapiprodscus.blob.core.windows.net/private/org-hIgHQX7N5rdaubIB1KRlLJkv/user-nB7ol9FVVBLk70hGeVdtzoGl/img-QuCaYVuwDcOytdp9xlpzRvyD.png?st=2025-06-20T13%3A41%3A36Z&se=2025-06-20T15%3A41%3A36Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=475fd488-6c59-44a5-9aa9-31c4db451bea&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-06-20T13%3A54%3A43Z&ske=2025-06-21T13%3A54%3A43Z&sks=b&skv=2024-08-04&sig=xfEW8zo/OdQI5oGpH3MHL8ABgzcc2hWvxdUxEL%2BbL1Y%3D
+2025-06-20 20:11:36 [INFO]: Ensuring images directory exists at: C:\Users\manom\Desktop\bibleai\server\public\images
+2025-06-20 20:11:36 [INFO]: Images directory already exists
+2025-06-20 20:11:36 [INFO]: Will save image to: C:\Users\manom\Desktop\bibleai\server\public\images\964cbdde-b716-46fc-9c5a-f776625ef22f.png
+2025-06-20 20:11:37 [INFO]: Image download successful, saving to disk
+2025-06-20 20:11:40 [INFO]: Image saved successfully. Public URL: /images/964cbdde-b716-46fc-9c5a-f776625ef22f.png

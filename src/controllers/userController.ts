@@ -128,6 +128,7 @@ export const getProfile = async (req: Request, res: Response, next: NextFunction
           id: user._id,
           name: user.name,
           email: user.email,
+          createdAt: user.createdAt,
         },
       },
     });
