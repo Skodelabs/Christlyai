@@ -15,8 +15,24 @@ export const generateNewQuiz = async (req: Request, res: Response, next: NextFun
 
     const userId = new mongoose.Types.ObjectId(req.user.userId);
     
-    // Generate 10 Bible quiz questions
-    const questions = await openaiService.generateBibleQuizQuestions();
+    // Get previously asked questions from completed quizzes
+    const completedQuizzes = await BibleQuiz.find({ 
+      userId, 
+      completed: true 
+    }).sort({ createdAt: -1 }).limit(10);
+    
+    // Extract all questions from previous quizzes to avoid duplicates
+    const previousQuestions: string[] = [];
+    completedQuizzes.forEach(quiz => {
+      quiz.questions.forEach(q => {
+        previousQuestions.push(q.question);
+      });
+    });
+    
+    console.log(`Found ${previousQuestions.length} previous questions to avoid duplicates`);
+    
+    // Generate 10 Bible quiz questions, passing previous questions to avoid duplicates
+    const questions = await openaiService.generateBibleQuizQuestions(previousQuestions);
     
     // Create a new quiz in the database
     const quiz = await BibleQuiz.create({
@@ -136,10 +152,17 @@ export const submitAnswer = async (req: Request, res: Response, next: NextFuncti
     const currentQuestion = quiz.questions[currentQuestionIndex];
     const isCorrect = currentQuestion.correctAnswer === answer;
     
-    // If answer is correct, increment the score
+    // Track the user's score separately from question progression
+    let userScore = quiz.score;
+    
+    // If answer is correct, increment the user's score
     if (isCorrect) {
-      quiz.score += 1;
+      userScore += 1;
     }
+    
+    // Always advance to the next question, regardless of whether the answer was correct
+    // This ensures users don't get stuck on a question they can't answer
+    quiz.score = currentQuestionIndex + 1;
     
     // Check if this was the last question
     const isLastQuestion = currentQuestionIndex === quiz.questions.length - 1;
@@ -157,7 +180,7 @@ export const submitAnswer = async (req: Request, res: Response, next: NextFuncti
         isCorrect,
         correctAnswer: currentQuestion.correctAnswer,
         explanation: currentQuestion.explanation,
-        score: quiz.score,
+        score: userScore, // Use the actual user score (correct answers count)
         completed: quiz.completed,
         nextQuestionNumber: isLastQuestion ? null : currentQuestionIndex + 2,
         totalQuestions: quiz.questions.length

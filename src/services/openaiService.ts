@@ -69,7 +69,9 @@ export const generateText = async (
  */
 export const generateSpeech = async (
   text: string,
-  title: string
+  title: string,
+  instructions?: string,
+  voice?: string
 ): Promise<string> => {
   try {
     // Generate a unique filename
@@ -79,9 +81,9 @@ export const generateSpeech = async (
     // Call OpenAI TTS API
     const mp3 = await openai.audio.speech.create({
       model: "gpt-4o-mini-tts",
-      voice: "fable", // Options: alloy, echo, fable, onyx, nova, shimmer
+      voice: voice || "fable", // Options: alloy, echo, fable, onyx, nova, shimmer
       input: text,
-      instructions: `
+      instructions: instructions || `
         Speak in a warm, emotional, and storytelling tone as if sharing a heartfelt Bible story with children or families.
         Keep the delivery respectful and full of hope and inspiration.
         Use natural pauses, inflection, and gentle emphasis to highlight key moments and emotions.
@@ -247,7 +249,7 @@ export const generatePrayer = async (
  */
 export const createCompletion = async (prompt: string): Promise<string> => {
   try {
-    const { text } = await generateText(prompt, 500, true);
+    const { text } = await generateText(prompt, 4096, true);
     return text;
   } catch (error) {
     console.error('Error creating completion for Bible quiz:', error);
@@ -257,8 +259,9 @@ export const createCompletion = async (prompt: string): Promise<string> => {
 
 /**
  * Generate 10 Bible quiz questions with fill-in-the-blank format
+ * @param previousQuestions Array of previously asked questions to avoid duplicates
  */
-export const generateBibleQuizQuestions = async (): Promise<Array<{
+export const generateBibleQuizQuestions = async (previousQuestions: string[] = []): Promise<Array<{
   question: string;
   options: string[];
   correctAnswer: string;
@@ -276,21 +279,30 @@ export const generateBibleQuizQuestions = async (): Promise<Array<{
         Make sure the questions cover different parts of the Bible (Old and New Testament).
         Ensure the options are plausible but only one is correct.
         The explanation should provide the full verse and reference.
+
+        important:
+        -do not add Fill in the blank: in the question.
+        -in explanation also explain the meaning of the verse.
+        -for blank always use 4 ____(this underscore 4 times).
+        
+        ${previousQuestions.length > 0 ? `IMPORTANT: Do NOT use any of these previously asked questions. Create entirely new questions that cover different Bible verses:
+        ${previousQuestions.map(q => q.trim()).join("\n        ")}
+        ` : ''}
         
         Return the response in this exact JSON format:
         {
           "questions": [
             {
-              "question": "Fill in the blank: 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not ___.'" ,
+              "question": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not ___.'" ,
               "options": ["perish", "die", "suffer", "fall"],
               "correctAnswer": "perish",
-              "explanation": "The correct answer is 'perish'. The full verse is John 3:16: 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.'"
+              "explanation": "The correct answer is 'perish'. The full verse is John 3:16: 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.'" // with explanation of meaning of the verse
             }
           ]
         }`
       }],
       response_format: { type: "json_object" },
-      max_tokens: 2000,
+      max_tokens: 4096,
     });
 
     const content = response.choices[0].message.content || "";
@@ -333,6 +345,19 @@ export const generateBibleQuizQuestions = async (): Promise<Array<{
         // If not, replace the first option with the correct answer
         q.options[0] = q.correctAnswer;
       }
+      
+      // Randomize the position of the correct answer by shuffling the options array
+      // First, store the correct answer
+      const correctAnswer = q.correctAnswer;
+      
+      // Shuffle the options array
+      for (let i = q.options.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [q.options[i], q.options[j]] = [q.options[j], q.options[i]];
+      }
+      
+      // Make sure we update the correctAnswer index if it changed during shuffling
+      q.correctAnswer = correctAnswer;
     });
     
     return validQuestions;
@@ -365,7 +390,7 @@ export const generateDevotionalStory = async (): Promise<{
   
   Do not include any markdown formatting, code blocks, or any text outside of the JSON object.`;
 
-  const { text, tokensUsed } = await generateText(storyPrompt, 1000, true);
+  const { text, tokensUsed } = await generateText(storyPrompt, 4096, true);
 
   try {
     // Clean the text in case it contains markdown formatting
@@ -376,9 +401,17 @@ export const generateDevotionalStory = async (): Promise<{
     const imagePrompt = `Create an inspirational Christian image representing this devotional: ${parsedResponse.title}. The devotional is about: ${parsedResponse.lesson}`;
     const { imageUrl } = await generateImage(imagePrompt);
 
-    // Generate audio narration for the story
+    // Generate audio narration for the story with a warm, storytelling voice
     const storyText = `${parsedResponse.title}. ${parsedResponse.verse}. ${parsedResponse.story}. ${parsedResponse.lesson}`;
-    const audioUrl = await generateSpeech(storyText, parsedResponse.title);
+    const devotionalInstructions = `
+      Speak in a warm, engaging storytelling tone that captures the listener's attention and imagination.
+      Convey the emotional journey of the devotional with appropriate shifts in tone and pacing.
+      Use a respectful, clear voice when reading Bible verses, slightly different from the narrative sections.
+      Emphasize key moral lessons with a thoughtful, reflective quality.
+      Keep the delivery conversational yet inspiring, as if sharing wisdom with a friend.
+      Create a sense of narrative arc through your voice, building toward the spiritual insight.
+    `;
+    const audioUrl = await generateSpeech(storyText, parsedResponse.title, devotionalInstructions, "fable");
 
     return {
       title: parsedResponse.title,
@@ -427,7 +460,7 @@ export const generateTopicContent = async (
   Make sure the content is spiritually enriching, biblically accurate, and personally applicable.
   Do not include any markdown formatting, code blocks, or any text outside of the JSON object.`;
 
-  const { text, tokensUsed } = await generateText(topicPrompt, 1000, true);
+  const { text, tokensUsed } = await generateText(topicPrompt, 4096, true);
 
   try {
     // Clean the text in case it contains markdown formatting
@@ -438,9 +471,17 @@ export const generateTopicContent = async (
     const imagePrompt = `Create an inspirational Christian image representing the Biblical topic of "${topic}". The image should be respectful, spiritual, and evoke the essence of ${parsedResponse.verse}.`;
     const { imageUrl } = await generateImage(imagePrompt);
 
-    // Generate audio narration for the topic content
+    // Generate audio narration for the topic content with prayer-like, feeling-full voice
     const audioText = `${parsedResponse.title}. ${parsedResponse.verse}. ${parsedResponse.content}. ${parsedResponse.explanation}`;
-    const audioUrl = await generateSpeech(audioText, parsedResponse.title);
+    const topicInstructions = `
+      Speak in a deeply reverent, prayerful, and contemplative tone appropriate for Bible verses and spiritual reflection.
+      Express genuine emotion and spiritual depth, with a voice that conveys awe and reverence for scripture.
+      Use thoughtful pauses between sentences to allow for reflection, especially after Bible verses.
+      Emphasize key words in the scripture with gentle emphasis to highlight their spiritual significance.
+      Transition to a warmer, more personal tone during the explanation sections to connect the scripture to daily life.
+      Maintain a peaceful, meditative quality throughout that invites the listener into prayer and reflection.
+    `;
+    const audioUrl = await generateSpeech(audioText, parsedResponse.title, topicInstructions, "nova");
 
     return {
       title: parsedResponse.title,
