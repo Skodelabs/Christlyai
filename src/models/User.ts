@@ -9,9 +9,12 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
+  googleId?: string;
+  profilePicture?: string;
   notificationToken?: string;
   isActive: boolean;
   preferredNotificationTime?: string;
+  authProvider: 'local' | 'google' | 'apple';
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -36,9 +39,26 @@ const userSchema = new Schema<IUser>(
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
+      required: function() {
+        return this.authProvider === 'local';
+      },
       minlength: [6, 'Password must be at least 6 characters long'],
       select: false,
+    },
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    profilePicture: {
+      type: String,
+      default: null,
+    },
+    authProvider: {
+      type: String,
+      enum: ['local', 'google', 'apple'],
+      default: 'local',
+      required: true,
     },
     notificationToken: {
       type: String,
@@ -62,7 +82,8 @@ const userSchema = new Schema<IUser>(
  * Hash password before saving
  */
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
+  // Only hash password if it's modified and auth provider is local
+  if (!this.isModified('password') || this.authProvider !== 'local') return next();
 
   try {
     const salt = await bcrypt.genSalt(10);
