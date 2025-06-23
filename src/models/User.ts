@@ -10,6 +10,7 @@ export interface IUser extends Document {
   email: string;
   password: string;
   googleId?: string;
+  appleUserId?: string;
   profilePicture?: string;
   notificationToken?: string;
   isActive: boolean;
@@ -46,6 +47,11 @@ const userSchema = new Schema<IUser>(
       select: false,
     },
     googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    appleUserId: {
       type: String,
       unique: true,
       sparse: true,

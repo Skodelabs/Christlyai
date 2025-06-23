@@ -298,3 +298,83 @@ export const googleSignIn = async (req: Request, res: Response, next: NextFuncti
     next(error);
   }
 };
+
+/**
+ * Apple Sign-In
+ */
+export const appleSignIn = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { identityToken, user: appleUserId, fullName, userData } = req.body;
+    
+    console.log('Received Apple sign-in request:', { 
+      hasIdentityToken: !!identityToken, 
+      appleUserId: appleUserId || 'missing',
+      hasFullName: !!fullName,
+      hasUserData: !!userData
+    });
+    
+    if (!identityToken || !appleUserId) {
+      throw new AppError('Identity token and user ID are required', 400);
+    }
+    
+    // Apple doesn't provide email on subsequent sign-ins, so we need to rely on the appleUserId
+    // We'll use the userData provided by the client if available
+    
+    // Check if user exists with this Apple ID
+    let user = await User.findOne({ appleUserId });
+    
+    if (!user) {
+      // If we have email from userData, check if user exists with this email
+      if (userData && userData.email) {
+        user = await User.findOne({ email: userData.email });
+      }
+      
+      if (user) {
+        // Update existing user with Apple ID
+        user.appleUserId = appleUserId;
+        user.authProvider = 'apple';
+        await user.save();
+      } else {
+        // Create new user
+        // For Apple Sign In, we might not have email on subsequent sign-ins
+        // So we'll use the best information available
+        const name = fullName ? 
+          `${fullName.givenName || ''} ${fullName.familyName || ''}`.trim() : 
+          (userData?.name || `Apple User ${appleUserId.substring(0, 6)}`);
+        
+        const email = userData?.email || `apple_${appleUserId}@example.com`;
+        
+        user = await User.create({
+          name,
+          email,
+          appleUserId,
+          authProvider: 'apple',
+          password: Math.random().toString(36).slice(-8), // Random password (not used)
+        });
+      }
+    }
+    
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id.toString() },
+      config.jwtSecret,
+      { expiresIn: '30d' }
+    );
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user: {
+          id: user._id.toString(),
+          name: user.name,
+          email: user.email,
+          profilePicture: user.profilePicture,
+        },
+        token,
+      },
+    });
+  } catch (error) {
+    console.error('Error with Apple sign-in:', error);
+    next(error);
+  }
+};
