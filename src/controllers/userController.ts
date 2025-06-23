@@ -6,6 +6,9 @@ import axios from 'axios';
 import { AppError } from '../middleware/error';
 import { config } from '../config/env';
 import { User, IUser } from '../models/User';
+import { Prayer } from '../models/Prayer';
+import { Inspiration } from '../models/Inspiration';
+import { AILog } from '../models/AILog';
 
 /**
  * Register a new user
@@ -375,6 +378,106 @@ export const appleSignIn = async (req: Request, res: Response, next: NextFunctio
     });
   } catch (error) {
     console.error('Error with Apple sign-in:', error);
+    next(error);
+  }
+};
+
+/**
+ * Delete user account
+ */
+export const deleteAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError('Not authenticated', 401);
+    }
+    
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    
+    // Find the user to be deleted
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    
+    // Start a session for transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
+    try {
+      // Delete user's prayers
+      await Prayer.deleteMany({ userId }, { session });
+      
+      // Delete user's inspirations
+      await Inspiration.deleteMany({ userId }, { session });
+      
+      // Delete user's AI logs
+      await AILog.deleteMany({ userId }, { session });
+      
+      // Delete the user
+      await User.findByIdAndDelete(userId, { session });
+      
+      // Commit the transaction
+      await session.commitTransaction();
+    } catch (error) {
+      // Abort transaction on error
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      // End session
+      session.endSession();
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Account deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    next(error);
+  }
+};
+
+/**
+ * Change user password
+ */
+export const changePassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError('Not authenticated', 401);
+    }
+    
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      throw new AppError('Current password and new password are required', 400);
+    }
+    
+    // Find user
+    const user = await User.findById(userId).select('+password');
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    
+    // Skip password check for social auth users who don't have a password
+    if (user.authProvider === 'local') {
+      // Verify current password
+      const isPasswordCorrect = await user.comparePassword(currentPassword);
+      if (!isPasswordCorrect) {
+        throw new AppError('Current password is incorrect', 401);
+      }
+    }
+    
+    // Update password
+    user.password = newPassword;
+    await user.save();
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    console.error('Error changing password:', error);
     next(error);
   }
 };
