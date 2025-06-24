@@ -116,21 +116,7 @@ export const generateImage = async (
     const response = await openai.images.generate({
       model: "dall-e-3",
       prompt: `
-        Very important: Do **not** create or show the face of God.
-        Do not depict God bald, beardless, or in a way that could be culturally inaccurate or disrespectful.
-        If God is represented, only show from behind or use symbolic light, glow, or divine presence. Do not include any facial details at all.
-    
-        Create a respectful, artistic, Bible-themed image based on the following concept: ${prompt}.
-        
-        The background should **not** look like science fiction, space, or artificial CGI graphics.
-        Use natural, beautiful elements like lush greenery, ocean, sunrise, sunlight, or open skies.
-        Make it look real, peaceful, and emotionally inspiring — as if from a sacred or devotional moment in nature.
-        
-        Do not include any text in the image.
-        Avoid any form of blasphemy, disrespect, or controversial religious interpretations.
-        
-        Depict all human and angelic characters with dignity, modesty, and spiritual reverence.
-        Use a soft, sacred, symbolic, and emotionally resonant art style — like classical or spiritual paintings but with modern digital quality.
+        ${prompt}
       `,
       n: 1,
       size: "1024x1024",
@@ -200,42 +186,75 @@ export const generateDailyQuote = async (): Promise<{
 };
 
 /**
- * Generate personalized prayer based on user mood
+ * Generate personalized prayer based on user mood and recipient
  */
 export const generatePrayer = async (
   mood: string,
   situation?: string,
-  prayerFocus: string[] = ["general"]
-): Promise<{ prayer: string; tokensUsed: number }> => {
+  recipient?: { id: string; name: string; icon: string }
+): Promise<{ prayer: string; imagePrompt: string; imageUrl: string; tokensUsed: number }> => {
+  const recipientContext = recipient ? `
+  This prayer is specifically for ${recipient.name === 'Me' ? 'the person praying themselves' : recipient.name}.
+  Tailor the prayer to be appropriate for this recipient and their relationship to the person praying.` : '';
+
   const prompt = `Generate a heartfelt Christian prayer for someone who is feeling ${mood}.
   ${situation ? `They are currently experiencing this situation: "${situation}"` : ''}
-  The prayer should focus on these areas: ${prayerFocus.join(", ")}.
+  ${recipientContext}
   The prayer should be 3-4 paragraphs long, written in first person, and include relevant Bible references.
   Make it personal, comforting, and spiritually uplifting.
   ${situation ? `Address the specific situation they described in a meaningful way.` : ''}
   
+  Also generate an image prompt that represents the emotional and spiritual essence of this prayer.
+  The image prompt should be 50-100 words describing a scene that visually represents the prayer's theme.
+  
+  IMPORTANT GUIDELINES FOR THE IMAGE PROMPT:
+  - When depicting God, represent as Jesus Christ with appropriate Christian imagery
+  - Use the cross as the primary Christian symbol in imagery
+  - Avoid sci-fi, space, or artificial CGI backgrounds
+  - Use natural, peaceful, and emotionally inspiring elements (greenery, ocean, sunrise, etc.)
+  - No text in images
+  - Avoid blasphemy, disrespect, or controversial religious interpretations
+  - Depict human and angelic characters with dignity and modesty
+  - Use a soft, sacred, symbolic art style akin to classical or spiritual paintings with modern quality
+  
   IMPORTANT: You must return a valid JSON object with the following structure:
   {
-    "prayer": "your prayer text here"
+    "prayer": "your prayer text here",
+    "imagePrompt": "your image prompt here"
   }
   
   Do not include any markdown formatting, code blocks, or any text outside of the JSON object.`;
 
-  const { text, tokensUsed } = await generateText(prompt, 800, true);
+  const { text, tokensUsed } = await generateText(prompt, 1000, true);
 
   try {
     // Clean the text in case it contains markdown formatting
     const cleanedText = text.replace(/```json|```/g, "").trim();
     const parsedResponse = JSON.parse(cleanedText);
+    
+    // Get the image prompt and generate an image
+    const imagePrompt = parsedResponse.imagePrompt || 
+      "A serene, spiritual scene representing Christian prayer with Jesus Christ and a cross, divine comfort with soft light, natural elements, and peaceful atmosphere";
+    
+    // Generate the image using DALL-E
+    const { imageUrl } = await generateImage(imagePrompt);
+    
     return {
       prayer: parsedResponse.prayer || text,
+      imagePrompt: imagePrompt,
+      imageUrl: imageUrl,
       tokensUsed,
     };
   } catch (error) {
     console.error("Failed to parse prayer response:", error, text);
     // Fallback to using the raw text if parsing fails
+    const defaultImagePrompt = "A serene, spiritual scene representing Christian prayer with Jesus Christ and a cross, divine comfort with soft light, natural elements, and peaceful atmosphere";
+    const { imageUrl } = await generateImage(defaultImagePrompt);
+    
     return {
       prayer: text,
+      imagePrompt: defaultImagePrompt,
+      imageUrl: imageUrl,
       tokensUsed,
     };
   }
@@ -369,24 +388,56 @@ export const generateBibleQuizQuestions = async (previousQuestions: string[] = [
 
 /**
  * Generate devotional story with image
+ * @param userId - The user ID to check for previous stories
+ * @param previousTitles - Optional array of previously generated story titles to avoid repetition
  */
-export const generateDevotionalStory = async (): Promise<{
+export const generateDevotionalStory = async (userId?: string, previousTitles: string[] = []): Promise<{
   title: string;
   story: string;
   imageUrl: string;
   audioUrl: string;
   tokensUsed: number;
 }> => {
+  // Create a list of previous titles to avoid repetition
+  const previousTitlesText = previousTitles.length > 0 
+    ? `IMPORTANT: Avoid creating stories with these titles that were previously generated for this user:\n${previousTitles.join('\n')}\n\nCreate a completely new and original story with a different title and theme.`
+    : '';
+
   const storyPrompt = `Create a short Christian devotional story (about 500 words) that teaches a Biblical principle.
   Include a title, a Bible verse reference that relates to the story, and a moral lesson.
+  
+  ${previousTitlesText}
   
   IMPORTANT: You must return a valid JSON object with the following structure:
   {
     "title": "Title of the devotional",
     "verse": "Bible verse reference",
     "story": "The devotional story content",
-    "lesson": "The moral or spiritual lesson from the story"
+    "lesson": "The moral or spiritual lesson from the story",
+    "imagePrompt": "A detailed image prompt describing a scene from the story that would make a good illustration (50-100 words)"
   }
+
+    IMPORTANT GUIDELINES FOR THE IMAGE PROMPT:
+  - When depicting God, represent as Jesus Christ with appropriate Christian imagery
+  - Use the cross as the primary Christian symbol in imagery
+  - Avoid sci-fi, space, or artificial CGI backgrounds
+  - Use natural, peaceful, and emotionally inspiring elements (greenery, ocean, sunrise, etc.)
+  - No text in images
+  - Avoid blasphemy, disrespect, or controversial religious interpretations
+  - Depict human and angelic characters with dignity and modesty
+  - Use a soft, sacred, symbolic art style akin to classical or spiritual paintings with modern quality
+  
+  For the imagePrompt, follow these guidelines:
+  - Very important: Do NOT create or show the face of God
+  - Do not depict God bald, beardless, or in a way that could be culturally inaccurate or disrespectful
+  - If God is represented, only show from behind or use symbolic light, glow, or divine presence with no facial details
+  - The background should NOT look like science fiction, space, or artificial CGI graphics
+  - Use natural, beautiful elements like lush greenery, ocean, sunrise, sunlight, or open skies
+  - Make it look real, peaceful, and emotionally inspiring — as if from a sacred or devotional moment in nature
+  - Do not include any text in the image
+  - Avoid any form of blasphemy, disrespect, or controversial religious interpretations
+  - Depict all human and angelic characters with dignity, modesty, and spiritual reverence
+  - Use a soft, sacred, symbolic, and emotionally resonant art style — like classical or spiritual paintings but with modern digital quality
   
   Do not include any markdown formatting, code blocks, or any text outside of the JSON object.`;
 
@@ -397,8 +448,9 @@ export const generateDevotionalStory = async (): Promise<{
     const cleanedText = text.replace(/```json|```/g, "").trim();
     const parsedResponse = JSON.parse(cleanedText);
 
-    // Generate an image based on the story
-    const imagePrompt = `Create an inspirational Christian image representing this devotional: ${parsedResponse.title}. The devotional is about: ${parsedResponse.lesson}`;
+    // Generate an image based on the story using the provided imagePrompt or fallback to a default prompt
+    const imagePrompt = parsedResponse.imagePrompt || 
+      `Create an inspirational Christian image representing this devotional: ${parsedResponse.title}. The devotional is about: ${parsedResponse.lesson}`;
     const { imageUrl } = await generateImage(imagePrompt);
 
     // Generate audio narration for the story with a warm, storytelling voice
@@ -432,7 +484,7 @@ export const generateDevotionalStory = async (): Promise<{
 export const generateTopicContent = async (
   topic: string,
   bibleVersion: string = 'NIV',
-  wordCount: number = 300
+  wordCount: number = 500
 ): Promise<{
   title: string;
   content: string;
@@ -454,8 +506,31 @@ export const generateTopicContent = async (
     "title": "An engaging title related to the topic",
     "verse": "A Bible verse that best represents this topic (include reference) from the ${bibleVersion} translation",
     "content": "A ${wordCount}-word reflection on this topic from a Biblical perspective",
-    "explanation": "A ${explanationWordCount}-word explanation of how this topic applies to modern Christian life"
+    "explanation": "A ${explanationWordCount}-word explanation of how this topic applies to modern Christian life",
+    "imagePrompt": "A detailed image prompt describing a meaningful visual representation of this topic (50-100 words)"
   }
+
+    IMPORTANT GUIDELINES FOR THE IMAGE PROMPT:
+  - When depicting God, represent as Jesus Christ with appropriate Christian imagery
+  - Use the cross as the primary Christian symbol in imagery
+  - Avoid sci-fi, space, or artificial CGI backgrounds
+  - Use natural, peaceful, and emotionally inspiring elements (greenery, ocean, sunrise, etc.)
+  - No text in images
+  - Avoid blasphemy, disrespect, or controversial religious interpretations
+  - Depict human and angelic characters with dignity and modesty
+  - Use a soft, sacred, symbolic art style akin to classical or spiritual paintings with modern quality
+  
+  For the imagePrompt, follow these guidelines:
+  - Very important: Do NOT create or show the face of God
+  - Do not depict God bald, beardless, or in a way that could be culturally inaccurate or disrespectful
+  - If God is represented, only show from behind or use symbolic light, glow, or divine presence with no facial details
+  - The background should NOT look like science fiction, space, or artificial CGI graphics
+  - Use natural, beautiful elements like lush greenery, ocean, sunrise, sunlight, or open skies
+  - Make it look real, peaceful, and emotionally inspiring — as if from a sacred or devotional moment in nature
+  - Do not include any text in the image
+  - Avoid any form of blasphemy, disrespect, or controversial religious interpretations
+  - Depict all human and angelic characters with dignity, modesty, and spiritual reverence
+  - Use a soft, sacred, symbolic, and emotionally resonant art style — like classical or spiritual paintings but with modern digital quality
   
   Make sure the content is spiritually enriching, biblically accurate, and personally applicable.
   Do not include any markdown formatting, code blocks, or any text outside of the JSON object.`;
@@ -467,8 +542,9 @@ export const generateTopicContent = async (
     const cleanedText = text.replace(/```json|```/g, "").trim();
     const parsedResponse = JSON.parse(cleanedText);
 
-    // Generate an image based on the topic
-    const imagePrompt = `Create an inspirational Christian image representing the Biblical topic of "${topic}". The image should be respectful, spiritual, and evoke the essence of ${parsedResponse.verse}.`;
+    // Generate an image based on the topic using the provided imagePrompt or fallback to a default prompt
+    const imagePrompt = parsedResponse.imagePrompt || 
+      `Create an inspirational Christian image representing the Biblical topic of "${topic}". The image should be respectful, spiritual, and evoke the essence of ${parsedResponse.verse}.`;
     const { imageUrl } = await generateImage(imagePrompt);
 
     // Generate audio narration for the topic content with prayer-like, feeling-full voice

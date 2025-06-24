@@ -45,45 +45,51 @@ export const getDailyQuote = async (req: Request, res: Response, next: NextFunct
 };
 
 /**
- * Generate personalized prayer based on user mood
+ * Generate personalized prayer based on user mood and recipient
  */
 export const generatePrayer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     if (!req.user) {
       throw new AppError('Not authenticated', 401);
     }
-
-    const { mood, situation } = req.body;
+    console.log(req.body);
+    const { mood, situation, recipient } = req.body;
     
     if (!mood) {
       throw new AppError('Mood is required', 400);
     }
     
-    // Situation is optional but we'll pass it if provided
+    // Situation and recipient are optional but we'll pass them if provided
     
     const userId = new mongoose.Types.ObjectId(req.user.userId);
     
-    // Generate prayer with situation if provided
-    const { prayer, tokensUsed } = await openaiService.generatePrayer(mood, situation);
+    // Generate prayer with situation and recipient if provided
+    const { prayer, imagePrompt, imageUrl, tokensUsed } = await openaiService.generatePrayer(mood, situation, recipient);
     
     // Log the interaction with structured data
     await AILog.create({
       userId,
       interactionType: 'prayer',
-      prompt: situation 
-        ? `Prayer request for mood: ${mood}, situation: ${situation}` 
-        : `Prayer request for mood: ${mood}`,
+      prompt: JSON.stringify({
+        mood,
+        situation: situation || null,
+        recipient: recipient || null
+      }),
       response: JSON.stringify({
         prayer,
-        situation
+        imagePrompt,
+        imageUrl,
+        situation: situation || null,
+        recipient: recipient || null
       }),
       tokensUsed,
     });
-    
+    console.log("Prayer generated successfully", );
     res.status(200).json({
       status: 'success',
       data: {
         prayer,
+        imageUrl,
       },
     });
   } catch (error) {
@@ -102,8 +108,27 @@ export const generateStory = async (req: Request, res: Response, next: NextFunct
 
     const userId = new mongoose.Types.ObjectId(req.user.userId);
     
-    // Generate devotional story with image and audio
-    const { title, story, imageUrl, audioUrl, tokensUsed } = await openaiService.generateDevotionalStory();
+    // Fetch previous story titles for this user to avoid repetition
+    const previousStoryLogs = await AILog.find({
+      userId,
+      interactionType: 'story'
+    }).sort({ createdAt: -1 }).limit(20); // Get the 20 most recent stories
+    
+    // Extract titles from the response JSON
+    const previousTitles = previousStoryLogs.map(log => {
+      try {
+        const response = JSON.parse(log.response);
+        return response.title;
+      } catch (e) {
+        return null;
+      }
+    }).filter(Boolean); // Remove any null values
+    
+    // Generate devotional story with image and audio, passing user ID and previous titles
+    const { title, story, imageUrl, audioUrl, tokensUsed } = await openaiService.generateDevotionalStory(
+      req.user.userId,
+      previousTitles
+    );
     
     // Log the interaction with structured data
     await AILog.create({
