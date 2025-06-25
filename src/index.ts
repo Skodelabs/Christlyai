@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import path from "path";
+import compression from "compression";
 import { config } from "./config/env";
 import { errorHandler } from "./middleware/error";
 import apiRoutes from "./routes/index";
@@ -11,8 +12,16 @@ const app: Express = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Enable compression for all responses
+app.use(compression());
+
+// Increase JSON payload size limits for large responses
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Set higher timeout for the server
+app.set('timeout', 120000); // 120 seconds timeout
 
 // Serve static files from the public directory
 const publicPath = path.join(__dirname, '../public');

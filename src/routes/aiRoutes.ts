@@ -11,7 +11,10 @@ router.use(authenticate);
 // AI routes
 router.get('/daily-quote', aiController.getDailyQuote);
 router.post('/prayer', aiController.generatePrayer);
+
+// Story routes - support both GET and POST for backward compatibility
 router.get('/story', aiController.generateStory);
+router.post('/story', aiController.generateStory); // Add POST endpoint for story generation
 
 // Topic content routes
 router.post('/topic-content', topicController.generateTopicContent);

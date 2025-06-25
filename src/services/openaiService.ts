@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { downloadAndSaveImage } from '../utils/imageUtils';
+import { estimateTokens } from "../utils/estimateTokens";
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -24,12 +25,12 @@ if (!fs.existsSync(audioDir)) {
  */
 export const generateText = async (
   prompt: string,
-  maxTokens: number = 4096,
+  maxTokens: number = 8192,
   jsonFormat: boolean = false
 ): Promise<{ text: string; tokensUsed: number }> => {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4.1",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       max_tokens: maxTokens,
       response_format: jsonFormat ? { type: "json_object" } : undefined,
@@ -107,42 +108,71 @@ export const generateSpeech = async (
 };
 
 /**
- * Generate image using DALL-E
+ * Generate image using DALL-E with safety guidelines
  */
 export const generateImage = async (
   prompt: string
 ): Promise<{ imageUrl: string }> => {
   try {
+    // Add safety guidelines to prevent image generation errors
+    const safetyGuidelines = `
+      IMPORTANT GUIDELINES FOR THE IMAGE:
+      - Do not depict the face of God or any divine being
+      - Represent religious figures with respect and dignity
+      - Use symbolic imagery like light, doves, or crosses for divine presence
+      - Avoid controversial or disrespectful religious interpretations
+      - Create a peaceful, inspiring scene with natural elements
+      - Use a classical, sacred art style
+      - No text in the image
+      - No explicit or violent content
+      - Depict all characters with dignity and modesty
+    `;
+
+    // Create a safe prompt by combining the original with guidelines
+    const safePrompt = `
+      Create a beautiful, inspirational Christian image with the following guidelines:
+      ${safetyGuidelines}
+
+      Based on this theme: ${prompt}
+    `;
+
+    console.log("Sending image generation prompt:", safePrompt.substring(0, 500) + "...");
+
     const response = await openai.images.generate({
       model: "dall-e-3",
-      prompt: `
-        ${prompt}
-      `,
+      prompt: safePrompt,
       n: 1,
       size: "1024x1024",
     });
-    
-    if (!response.data || response.data.length === 0) {
-      throw new Error("No image was generated");
-    }
-    
-    // Get the temporary OpenAI image URL
-    const openaiImageUrl = response.data[0].url || "";
-    
+
+    const openaiImageUrl = response.data?.[0]?.url;
+
+    console.log("OpenAI image URL:", openaiImageUrl);
     if (!openaiImageUrl) {
-      throw new Error("No image URL was returned");
+      throw new Error("No image URL returned from OpenAI");
     }
-    
-    // Download and save the image locally, get the local URL path
-    const localImageUrl = await downloadAndSaveImage(openaiImageUrl);
-    
-    // Return the local image URL (this will be a path like /images/uuid.png)
-    return {
-      imageUrl: localImageUrl,
-    };
+
+    // Download and save the image locally
+    try {
+      console.log("Downloading and saving image locally...");
+      const localImageUrl = await downloadAndSaveImage(openaiImageUrl);
+      console.log("Image saved locally at:", localImageUrl);
+      
+      // Return the local image URL
+      return {
+        imageUrl: localImageUrl,
+      };
+    } catch (downloadError) {
+      console.error("Error downloading image, falling back to OpenAI URL:", downloadError);
+      
+      // Fallback to the OpenAI URL if download fails
+      return {
+        imageUrl: openaiImageUrl,
+      };
+    }
   } catch (error) {
-    console.error("OpenAI API error:", error);
-    throw new Error("Failed to generate image");
+    console.error("OpenAI image generation error:", error);
+    throw error; // Or handle it upstream
   }
 };
 
@@ -206,17 +236,7 @@ export const generatePrayer = async (
   
   Also generate an image prompt that represents the emotional and spiritual essence of this prayer.
   The image prompt should be 50-100 words describing a scene that visually represents the prayer's theme.
-  
-  IMPORTANT GUIDELINES FOR THE IMAGE PROMPT:
-  - When depicting God, represent as Jesus Christ with appropriate Christian imagery
-  - Use the cross as the primary Christian symbol in imagery
-  - Avoid sci-fi, space, or artificial CGI backgrounds
-  - Use natural, peaceful, and emotionally inspiring elements (greenery, ocean, sunrise, etc.)
-  - No text in images
-  - Avoid blasphemy, disrespect, or controversial religious interpretations
-  - Depict human and angelic characters with dignity and modesty
-  - Use a soft, sacred, symbolic art style akin to classical or spiritual paintings with modern quality
-  
+
   IMPORTANT: You must return a valid JSON object with the following structure:
   {
     "prayer": "your prayer text here",
@@ -225,7 +245,7 @@ export const generatePrayer = async (
   
   Do not include any markdown formatting, code blocks, or any text outside of the JSON object.`;
 
-  const { text, tokensUsed } = await generateText(prompt, 1000, true);
+  const { text, tokensUsed } = await generateText(prompt, 2048, true);
 
   try {
     // Clean the text in case it contains markdown formatting
@@ -387,11 +407,24 @@ export const generateBibleQuizQuestions = async (previousQuestions: string[] = [
 };
 
 /**
- * Generate devotional story with image
+ * Generate devotional story with optional image and audio
  * @param userId - The user ID to check for previous stories
  * @param previousTitles - Optional array of previously generated story titles to avoid repetition
+ * @param topic - Optional topic for the story
+ * @param storyType - Type of story ('real' for biblical, 'imaginary' for modern parable)
+ * @param wordCount - Target word count for the story
+ * @param generateImage - Whether to generate an image for the story (default: true)
+ * @param generateAudio - Whether to generate audio narration for the story (default: true)
  */
-export const generateDevotionalStory = async (userId?: string, previousTitles: string[] = []): Promise<{
+export const generateDevotionalStory = async (
+  userId?: string, 
+  previousTitles: string[] = [],
+  topic?: string,
+  storyType: 'real' | 'imaginary' = 'real',
+  wordCount: number = 500,
+  isGenerateImage  : boolean = true,
+  isGenerateAudio: boolean = true
+): Promise<{
   title: string;
   story: string;
   imageUrl: string;
@@ -403,7 +436,18 @@ export const generateDevotionalStory = async (userId?: string, previousTitles: s
     ? `IMPORTANT: Avoid creating stories with these titles that were previously generated for this user:\n${previousTitles.join('\n')}\n\nCreate a completely new and original story with a different title and theme.`
     : '';
 
-  const storyPrompt = `Create a short Christian devotional story (about 500 words) that teaches a Biblical principle.
+  // Determine the type of story based on storyType parameter
+  const storyTypePrompt = storyType === 'real' 
+    ? 'Create a Biblical story based on real events from the Bible' 
+    : 'Create a modern Christian parable (fictional story with a Biblical message)';
+  
+  // Include topic if provided
+  const topicPrompt = topic 
+    ? `The story should focus on the topic of "${topic}".` 
+    : 'Choose any appropriate Biblical theme or principle for the story.';
+  
+  const storyPrompt = `${storyTypePrompt} (about ${wordCount} words) that teaches a Biblical principle.
+  ${topicPrompt}
   Include a title, a Bible verse reference that relates to the story, and a moral lesson.
   
   ${previousTitlesText}
@@ -416,54 +460,71 @@ export const generateDevotionalStory = async (userId?: string, previousTitles: s
     "lesson": "The moral or spiritual lesson from the story",
     "imagePrompt": "A detailed image prompt describing a scene from the story that would make a good illustration (50-100 words)"
   }
-
-    IMPORTANT GUIDELINES FOR THE IMAGE PROMPT:
-  - When depicting God, represent as Jesus Christ with appropriate Christian imagery
-  - Use the cross as the primary Christian symbol in imagery
-  - Avoid sci-fi, space, or artificial CGI backgrounds
-  - Use natural, peaceful, and emotionally inspiring elements (greenery, ocean, sunrise, etc.)
-  - No text in images
-  - Avoid blasphemy, disrespect, or controversial religious interpretations
-  - Depict human and angelic characters with dignity and modesty
-  - Use a soft, sacred, symbolic art style akin to classical or spiritual paintings with modern quality
-  
-  For the imagePrompt, follow these guidelines:
-  - Very important: Do NOT create or show the face of God
-  - Do not depict God bald, beardless, or in a way that could be culturally inaccurate or disrespectful
-  - If God is represented, only show from behind or use symbolic light, glow, or divine presence with no facial details
-  - The background should NOT look like science fiction, space, or artificial CGI graphics
-  - Use natural, beautiful elements like lush greenery, ocean, sunrise, sunlight, or open skies
-  - Make it look real, peaceful, and emotionally inspiring — as if from a sacred or devotional moment in nature
-  - Do not include any text in the image
-  - Avoid any form of blasphemy, disrespect, or controversial religious interpretations
-  - Depict all human and angelic characters with dignity, modesty, and spiritual reverence
-  - Use a soft, sacred, symbolic, and emotionally resonant art style — like classical or spiritual paintings but with modern digital quality
-  
   Do not include any markdown formatting, code blocks, or any text outside of the JSON object.`;
 
-  const { text, tokensUsed } = await generateText(storyPrompt, 4096, true);
+  // Calculate token limit based on word count - roughly 1.5x the word count for output tokens
+  // plus extra buffer for the prompt and response formatting
+
+  const { text, tokensUsed } = await generateText(storyPrompt, estimateTokens(wordCount), true);
 
   try {
     // Clean the text in case it contains markdown formatting
     const cleanedText = text.replace(/```json|```/g, "").trim();
     const parsedResponse = JSON.parse(cleanedText);
 
-    // Generate an image based on the story using the provided imagePrompt or fallback to a default prompt
-    const imagePrompt = parsedResponse.imagePrompt || 
-      `Create an inspirational Christian image representing this devotional: ${parsedResponse.title}. The devotional is about: ${parsedResponse.lesson}`;
-    const { imageUrl } = await generateImage(imagePrompt);
+    // Generate an image if requested
+    let imageUrl = "";
+    if (isGenerateImage) {
+      try {
+        const imagePrompt = parsedResponse.imagePrompt || 
+          `Create an inspirational Christian image representing this devotional: ${parsedResponse.title}. The devotional is about: ${parsedResponse.lesson}`;
+        // Avoid name collision with the generateImage parameter
 
-    // Generate audio narration for the story with a warm, storytelling voice
-    const storyText = `${parsedResponse.title}. ${parsedResponse.verse}. ${parsedResponse.story}. ${parsedResponse.lesson}`;
-    const devotionalInstructions = `
-      Speak in a warm, engaging storytelling tone that captures the listener's attention and imagination.
-      Convey the emotional journey of the devotional with appropriate shifts in tone and pacing.
-      Use a respectful, clear voice when reading Bible verses, slightly different from the narrative sections.
-      Emphasize key moral lessons with a thoughtful, reflective quality.
-      Keep the delivery conversational yet inspiring, as if sharing wisdom with a friend.
-      Create a sense of narrative arc through your voice, building toward the spiritual insight.
-    `;
-    const audioUrl = await generateSpeech(storyText, parsedResponse.title, devotionalInstructions, "fable");
+        if(isGenerateImage){
+          const imageResult = await generateImage(imagePrompt);
+          imageUrl = imageResult.imageUrl;
+          console.log("Image generated successfully for story");
+        }
+      } catch (imageError) {
+        console.error("Failed to generate image for story:", imageError);
+        // Continue without image if it fails
+      }
+    } else {
+      console.log("Image generation skipped as per user request");
+    }
+
+    // Generate audio narration if requested
+    let audioUrl = "";
+    if (isGenerateAudio) {
+      try {
+        // Limit the audio content size by truncating the story if it's too long
+        const maxAudioTextLength = 10000; // Limit to 2000 characters to prevent huge audio files
+        
+        // Create a shortened version of the story for audio if needed
+        let storyForAudio = parsedResponse.story;
+        if (storyForAudio.length > maxAudioTextLength - 200) { // Leave room for title, verse and lesson
+          storyForAudio = storyForAudio.substring(0, maxAudioTextLength - 200) + "... [Story continues in text version]";
+        }
+        
+        const storyText = `${parsedResponse.title}. ${parsedResponse.verse}. ${storyForAudio}. Key lesson: ${parsedResponse.lesson}`;
+        const devotionalInstructions = `
+          Speak in a warm, engaging storytelling tone that captures the listener's attention and imagination.
+          Convey the emotional journey of the devotional with appropriate shifts in tone and pacing.
+          Use a respectful, clear voice when reading Bible verses, slightly different from the narrative sections.
+          Emphasize key moral lessons with a thoughtful, reflective quality.
+          Keep the delivery conversational yet inspiring, as if sharing wisdom with a friend.
+          Create a sense of narrative arc through your voice, building toward the spiritual insight.
+        `;
+        
+        audioUrl = await generateSpeech(storyText, parsedResponse.title, devotionalInstructions, "fable");
+        console.log("Audio generated successfully for story");
+      } catch (audioError) {
+        console.error("Failed to generate audio for story:", audioError);
+        // Continue without audio if it fails
+      }
+    } else {
+      console.log("Audio generation skipped as per user request");
+    }
 
     return {
       title: parsedResponse.title,
@@ -484,7 +545,9 @@ export const generateDevotionalStory = async (userId?: string, previousTitles: s
 export const generateTopicContent = async (
   topic: string,
   bibleVersion: string = 'NIV',
-  wordCount: number = 500
+  wordCount: number = 500,
+  isGenerateImage: boolean = true,
+  isGenerateAudio: boolean = true
 ): Promise<{
   title: string;
   content: string;
@@ -510,54 +573,41 @@ export const generateTopicContent = async (
     "imagePrompt": "A detailed image prompt describing a meaningful visual representation of this topic (50-100 words)"
   }
 
-    IMPORTANT GUIDELINES FOR THE IMAGE PROMPT:
-  - When depicting God, represent as Jesus Christ with appropriate Christian imagery
-  - Use the cross as the primary Christian symbol in imagery
-  - Avoid sci-fi, space, or artificial CGI backgrounds
-  - Use natural, peaceful, and emotionally inspiring elements (greenery, ocean, sunrise, etc.)
-  - No text in images
-  - Avoid blasphemy, disrespect, or controversial religious interpretations
-  - Depict human and angelic characters with dignity and modesty
-  - Use a soft, sacred, symbolic art style akin to classical or spiritual paintings with modern quality
-  
-  For the imagePrompt, follow these guidelines:
-  - Very important: Do NOT create or show the face of God
-  - Do not depict God bald, beardless, or in a way that could be culturally inaccurate or disrespectful
-  - If God is represented, only show from behind or use symbolic light, glow, or divine presence with no facial details
-  - The background should NOT look like science fiction, space, or artificial CGI graphics
-  - Use natural, beautiful elements like lush greenery, ocean, sunrise, sunlight, or open skies
-  - Make it look real, peaceful, and emotionally inspiring — as if from a sacred or devotional moment in nature
-  - Do not include any text in the image
-  - Avoid any form of blasphemy, disrespect, or controversial religious interpretations
-  - Depict all human and angelic characters with dignity, modesty, and spiritual reverence
-  - Use a soft, sacred, symbolic, and emotionally resonant art style — like classical or spiritual paintings but with modern digital quality
-  
   Make sure the content is spiritually enriching, biblically accurate, and personally applicable.
   Do not include any markdown formatting, code blocks, or any text outside of the JSON object.`;
 
-  const { text, tokensUsed } = await generateText(topicPrompt, 4096, true);
+  const { text, tokensUsed } = await generateText(topicPrompt, estimateTokens(wordCount), true);
 
   try {
     // Clean the text in case it contains markdown formatting
     const cleanedText = text.replace(/```json|```/g, "").trim();
     const parsedResponse = JSON.parse(cleanedText);
 
-    // Generate an image based on the topic using the provided imagePrompt or fallback to a default prompt
-    const imagePrompt = parsedResponse.imagePrompt || 
-      `Create an inspirational Christian image representing the Biblical topic of "${topic}". The image should be respectful, spiritual, and evoke the essence of ${parsedResponse.verse}.`;
-    const { imageUrl } = await generateImage(imagePrompt);
+    // Initialize image and audio URLs as empty strings
+    let imageUrl = "";
+    let audioUrl = "";
+    
+    // Generate an image if the flag is enabled
+    if (isGenerateImage) {
+      const imagePrompt = parsedResponse.imagePrompt || 
+        `Create an inspirational Christian image representing the Biblical topic of "${topic}". The image should be respectful, spiritual, and evoke the essence of ${parsedResponse.verse}.`;
+      const imageResult = await generateImage(imagePrompt);
+      imageUrl = imageResult.imageUrl;
+    }
 
-    // Generate audio narration for the topic content with prayer-like, feeling-full voice
-    const audioText = `${parsedResponse.title}. ${parsedResponse.verse}. ${parsedResponse.content}. ${parsedResponse.explanation}`;
-    const topicInstructions = `
-      Speak in a deeply reverent, prayerful, and contemplative tone appropriate for Bible verses and spiritual reflection.
-      Express genuine emotion and spiritual depth, with a voice that conveys awe and reverence for scripture.
-      Use thoughtful pauses between sentences to allow for reflection, especially after Bible verses.
-      Emphasize key words in the scripture with gentle emphasis to highlight their spiritual significance.
-      Transition to a warmer, more personal tone during the explanation sections to connect the scripture to daily life.
-      Maintain a peaceful, meditative quality throughout that invites the listener into prayer and reflection.
-    `;
-    const audioUrl = await generateSpeech(audioText, parsedResponse.title, topicInstructions, "nova");
+    // Generate audio narration if the flag is enabled
+    if (isGenerateAudio) {
+      const audioText = `${parsedResponse.title}. ${parsedResponse.verse}. ${parsedResponse.content}. ${parsedResponse.explanation}`;
+      const topicInstructions = `
+        Speak in a deeply reverent, prayerful, and contemplative tone appropriate for Bible verses and spiritual reflection.
+        Express genuine emotion and spiritual depth, with a voice that conveys awe and reverence for scripture.
+        Use thoughtful pauses between sentences to allow for reflection, especially after Bible verses.
+        Emphasize key words in the scripture with gentle emphasis to highlight their spiritual significance.
+        Transition to a warmer, more personal tone during the explanation sections to connect the scripture to daily life.
+        Maintain a peaceful, meditative quality throughout that invites the listener into prayer and reflection.
+      `;
+      audioUrl = await generateSpeech(audioText, parsedResponse.title, topicInstructions, "nova");
+    }
 
     return {
       title: parsedResponse.title,

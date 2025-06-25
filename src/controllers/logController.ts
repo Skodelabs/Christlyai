@@ -261,6 +261,62 @@ export const toggleFavoriteStory = async (req: Request, res: Response, next: Nex
 /**
  * Save daily story to database to get a proper ObjectId
  */
+/**
+ * Get a specific devotional story by ID
+ */
+export const getDevotionalStoryById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError('Not authenticated', 401);
+    }
+
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    const storyId = req.params.storyId;
+    
+    // Validate storyId format
+    if (!mongoose.Types.ObjectId.isValid(storyId)) {
+      throw new AppError('Invalid story ID format', 400);
+    }
+    
+    // Find the story by ID and ensure it belongs to the user
+    const story = await AILog.findOne({ 
+      _id: storyId,
+      userId,
+      interactionType: 'story'
+    });
+    
+    if (!story) {
+      throw new AppError('Story not found', 404);
+    }
+    
+    // Process the story to extract title and date
+    let title = 'Untitled Story';
+    try {
+      const storyData = JSON.parse(story.response);
+      if (storyData && storyData.title) {
+        title = storyData.title;
+      }
+    } catch (e) {
+      console.error('Error parsing story response:', e);
+    }
+    
+    const processedStory = {
+      id: story._id,
+      title,
+      date: story.createdAt,
+      response: story.response,
+      isFavorite: story.isFavorite || false
+    };
+    
+    res.status(200).json({
+      status: 'success',
+      story: processedStory
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const saveDailyStory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     if (!req.user) {

@@ -481,3 +481,236 @@ export const changePassword = async (req: Request, res: Response, next: NextFunc
     next(error);
   }
 };
+
+/**
+ * Get prayer count for a user
+ */
+export const getPrayerCount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError('Not authenticated', 401);
+    }
+    
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    
+    // Reset prayer count if it's a new day and user is not pro
+    if (!user.isPro && user.lastPrayerDate) {
+      const lastDate = new Date(user.lastPrayerDate);
+      const today = new Date();
+      
+      if (lastDate.toDateString() !== today.toDateString()) {
+        user.prayerCount = 0;
+        await user.save();
+      }
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        prayerCount: user.prayerCount,
+        isPro: user.isPro,
+        lastPrayerDate: user.lastPrayerDate
+      }
+    });
+  } catch (error) {
+    console.error('Error getting prayer count:', error);
+    next(error);
+  }
+};
+
+/**
+ * Increment prayer count for a user
+ */
+export const incrementPrayerCount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError('Not authenticated', 401);
+    }
+    
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    
+    // If user is pro, always allow prayer creation
+    if (user.isPro) {
+      res.status(200).json({
+        status: 'success',
+        data: {
+          canCreatePrayer: true,
+          prayerCount: user.prayerCount,
+          isPro: true
+        }
+      });
+      return;
+    }
+    
+    // For free users, check if they've reached the limit (1 prayer total, not per day)
+    if (user.prayerCount >= 1) {
+      res.status(200).json({
+        status: 'success',
+        data: {
+          canCreatePrayer: false,
+          prayerCount: user.prayerCount,
+          isPro: false,
+          message: 'Free users can only create 1 prayer. Please upgrade to Pro for unlimited prayers.'
+        }
+      });
+      return;
+    }
+    
+    // Increment prayer count and update last prayer date
+    user.prayerCount += 1;
+    user.lastPrayerDate = new Date();
+    await user.save();
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        canCreatePrayer: true,
+        prayerCount: user.prayerCount,
+        isPro: false
+      }
+    });
+  } catch (error) {
+    console.error('Error incrementing prayer count:', error);
+    next(error);
+  }
+};
+
+/**
+ * Update user's pro status
+ */
+/**
+ * Get daily inspiration status for a user
+ */
+export const getDailyInspiration = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError('Not authenticated', 401);
+    }
+    
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    
+    // Reset daily inspiration if it's a new day and user is not pro
+    if (!user.isPro && user.lastInspirationDate) {
+      const lastDate = new Date(user.lastInspirationDate);
+      const today = new Date();
+      
+      if (lastDate.toDateString() !== today.toDateString()) {
+        user.hasUsedDailyInspiration = false;
+        await user.save();
+      }
+    }
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        hasUsedDailyInspiration: user.hasUsedDailyInspiration,
+        isPro: user.isPro,
+        lastInspirationDate: user.lastInspirationDate
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Mark daily inspiration as used
+ */
+export const markDailyInspirationAsUsed = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError('Not authenticated', 401);
+    }
+    
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    
+    // Check if user is Pro or hasn't used daily inspiration yet
+    const canUseInspiration = user.isPro || !user.hasUsedDailyInspiration;
+    
+    if (canUseInspiration) {
+      // If not Pro, mark as used
+      if (!user.isPro) {
+        user.hasUsedDailyInspiration = true;
+      }
+      
+      // Update last inspiration date
+      user.lastInspirationDate = new Date();
+      await user.save();
+      
+      res.status(200).json({
+        status: 'success',
+        data: {
+          canUseInspiration: true,
+          hasUsedDailyInspiration: user.hasUsedDailyInspiration,
+          isPro: user.isPro,
+          lastInspirationDate: user.lastInspirationDate
+        }
+      });
+    } else {
+      res.status(200).json({
+        status: 'success',
+        data: {
+          canUseInspiration: false,
+          hasUsedDailyInspiration: true,
+          isPro: user.isPro,
+          message: 'You have used your daily inspiration for today. Please upgrade to Pro for unlimited inspirations.'
+        }
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateProStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      throw new AppError('Not authenticated', 401);
+    }
+    
+    const userId = new mongoose.Types.ObjectId(req.user.userId);
+    const { isPro } = req.body;
+    
+    if (typeof isPro !== 'boolean') {
+      throw new AppError('isPro must be a boolean value', 400);
+    }
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    
+    user.isPro = isPro;
+    await user.save();
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        isPro: user.isPro
+      }
+    });
+  } catch (error) {
+    console.error('Error updating pro status:', error);
+    next(error);
+  }
+};

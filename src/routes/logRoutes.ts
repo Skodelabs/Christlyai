@@ -5,7 +5,8 @@ import {
   getPastDevotionalStories,
   getFavoriteDevotionalStories,
   toggleFavoriteStory,
-  saveDailyStory 
+  saveDailyStory,
+  getDevotionalStoryById 
 } from '../controllers/logController';
 import { authenticate } from '../middleware/auth';
 
@@ -20,7 +21,10 @@ router.get('/analytics', getAnalyticsSummary);
 router.get('/devotional-stories', getPastDevotionalStories);
 
 // Get favorite devotional stories
-router.get('/favorite-stories', getFavoriteDevotionalStories);
+router.get('/favorite-devotional-stories', getFavoriteDevotionalStories);
+
+// Get a specific devotional story by ID
+router.get('/devotional-story/:storyId', getDevotionalStoryById);
 
 // Toggle favorite status of a story
 router.patch('/stories/:storyId/favorite', toggleFavoriteStory);

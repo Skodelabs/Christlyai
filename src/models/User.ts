@@ -16,6 +16,11 @@ export interface IUser extends Document {
   isActive: boolean;
   preferredNotificationTime?: string;
   authProvider: 'local' | 'google' | 'apple';
+  prayerCount: number;
+  lastPrayerDate?: Date;
+  hasUsedDailyInspiration: boolean;
+  lastInspirationDate?: Date;
+  isPro: boolean;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -77,6 +82,26 @@ const userSchema = new Schema<IUser>(
     preferredNotificationTime: {
       type: String,
       default: '06:00', // Default to 6 AM
+    },
+    prayerCount: {
+      type: Number,
+      default: 0,
+    },
+    lastPrayerDate: {
+      type: Date,
+      default: null,
+    },
+    hasUsedDailyInspiration: {
+      type: Boolean,
+      default: false,
+    },
+    lastInspirationDate: {
+      type: Date,
+      default: null,
+    },
+    isPro: {
+      type: Boolean,
+      default: false,
     },
   },
   {

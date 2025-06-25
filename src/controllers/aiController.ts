@@ -106,44 +106,57 @@ export const generateStory = async (req: Request, res: Response, next: NextFunct
       throw new AppError('Not authenticated', 401);
     }
 
+    console.log("Generating story for user", req.user.userId);
+    
     const userId = new mongoose.Types.ObjectId(req.user.userId);
     
-    // Fetch previous story titles for this user to avoid repetition
-    const previousStoryLogs = await AILog.find({
-      userId,
-      interactionType: 'story'
-    }).sort({ createdAt: -1 }).limit(20); // Get the 20 most recent stories
+    // Extract parameters from either query params (GET) or body (POST)
+    let topic, storyType, wordCount, generateImage, generateAudio;
     
-    // Extract titles from the response JSON
-    const previousTitles = previousStoryLogs.map(log => {
-      try {
-        const response = JSON.parse(log.response);
-        return response.title;
-      } catch (e) {
-        return null;
-      }
-    }).filter(Boolean); // Remove any null values
+    if (req.method === 'POST') {
+      topic = req.body.topic;
+      storyType = req.body.storyType || 'real';
+      wordCount = parseInt(req.body.wordCount || '500', 10);
+      generateImage = req.body.generateImage !== undefined ? req.body.generateImage : true;
+      generateAudio = req.body.generateAudio !== undefined ? req.body.generateAudio : true;
+    } else {
+      topic = req.query.topic as string | undefined;
+      storyType = (req.query.storyType as 'real' | 'imaginary') || 'real';
+      wordCount = parseInt(req.query.wordCount as string || '500', 10);
+      generateImage = req.query.generateImage !== 'false';
+      generateAudio = req.query.generateAudio !== 'false';
+    }
     
-    // Generate devotional story with image and audio, passing user ID and previous titles
+    console.log(`Story generation parameters: topic=${topic}, type=${storyType}, wordCount=${wordCount}, generateImage=${generateImage}, generateAudio=${generateAudio}`);
+    
+    // Cap word count to prevent excessive content size
+    if (wordCount > 1000) {
+      wordCount = 1000;
+    }
+    const isGenerateImage = generateImage !== undefined ? generateImage : true;
+    const isGenerateAudio = generateAudio !== undefined ? generateAudio : true;
+    
+    // Generate devotional story with optional image and audio
     const { title, story, imageUrl, audioUrl, tokensUsed } = await openaiService.generateDevotionalStory(
       req.user.userId,
-      previousTitles
+      [], // No need to pass previous titles
+      topic,
+      storyType,
+      wordCount,
+      isGenerateImage,
+      isGenerateAudio
     );
     
-    // Log the interaction with structured data
+    // Log the interaction
     await AILog.create({
       userId,
       interactionType: 'story',
-      prompt: 'Devotional story request',
-      response: JSON.stringify({
-        title,
-        story,
-        imageUrl,
-        audioUrl
-      }),
+      prompt: JSON.stringify({ topic: topic || 'random', storyType, wordCount }),
+      response: JSON.stringify({ title, story, imageUrl, audioUrl }),
       tokensUsed,
     });
     
+    // Send the response
     res.status(200).json({
       status: 'success',
       data: {
@@ -153,7 +166,8 @@ export const generateStory = async (req: Request, res: Response, next: NextFunct
         audioUrl,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Story generation error:', error.message);
     next(error);
   }
 };

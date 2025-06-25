@@ -43,11 +43,13 @@ const topicContentSchema = new Schema<ITopicContent>(
     },
     imageUrl: {
       type: String,
-      required: true,
+      required: false,
+      default: "",
     },
     audioUrl: {
       type: String,
-      required: true,
+      required: false,
+      default: "",
     },
     bibleVersion: {
       type: String,

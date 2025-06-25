@@ -20,7 +20,7 @@ export const generateTopicContent = async (
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { topic, bibleVersion = "NIV", wordCount = 300 } = req.body;
+    const { topic, bibleVersion = "NIV", wordCount = 300, generateImage = true, generateAudio = true } = req.body;
 
     if (!topic) {
       return res.status(400).json({ error: "Topic is required" });
@@ -41,7 +41,8 @@ export const generateTopicContent = async (
     logger.info(
       `Generating topic content for user ${userId}: ${topic} (${bibleVersion}, ${parsedWordCount} words)`
     );
-
+    const isGenerateImage = generateImage !== undefined ? generateImage : true;
+    const isGenerateAudio = generateAudio !== undefined ? generateAudio : true;
     // Generate content using OpenAI
     const {
       title,
@@ -56,7 +57,9 @@ export const generateTopicContent = async (
     } = await openaiService.generateTopicContent(
       topic,
       bibleVersion,
-      parsedWordCount
+      parsedWordCount,
+      isGenerateImage,
+      isGenerateAudio
     );
 
     // Log the URLs for debugging
